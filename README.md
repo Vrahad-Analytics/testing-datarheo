@@ -27,9 +27,23 @@ docker compose -f docker/docker-compose.yml up -d
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
-- **Airflow**: http://localhost:8080 (admin/admin)
 - **Grafana** (monitoring): http://localhost:3001 (admin/admin)
 - **Prometheus** (monitoring): http://localhost:9090
+
+A demo account is available: `demo@datarheo.dev` / `demo1234` (org "Demo Workspace")
+with working example pipelines already configured.
+
+> Airflow is **optional** — pipeline execution and cron scheduling are handled by
+> the backend's built-in job worker. To run the Airflow UI as well:
+> `docker compose -f docker/docker-compose.yml --profile airflow up -d`
+
+### Working connectors
+
+Sources: `source-faker` (sample data, no creds), `source-postgres`, `source-http` (any JSON API), `source-csv` (files in `data/exports/`).
+
+Destinations: `destination-postgres`, `destination-duckdb`, `destination-csv`, `destination-jsonl` (all file/duckdb outputs land in `data/exports/`), `destination-databricks` (needs real workspace creds).
+
+Other catalog entries are marked "coming soon" and are blocked at creation so pipelines can't be built on unimplemented connectors. A `warehouse` Postgres database is created automatically for use as a demo destination.
 
 ## 📋 Features
 

@@ -22,8 +22,14 @@ const PORT = process.env.PORT || 8000;
 
 // Middleware
 app.use(helmet());
+const allowedOrigin = (origin: string | undefined): boolean => {
+  if (!origin) return true; // same-origin / curl / server-to-server
+  if (origin === process.env.FRONTEND_URL) return true;
+  // Allow any localhost/127.0.0.1 origin (dev server, preview proxies, etc.)
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+};
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: (origin, cb) => cb(null, allowedOrigin(origin)),
   credentials: true
 }));
 app.use(compression());

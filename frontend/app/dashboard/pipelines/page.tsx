@@ -31,6 +31,8 @@ interface Pipeline {
   description: string | null
   status: string
   schedule: string | null
+  lastRunAt: string | null
+  nextRunAt: string | null
   sourceConfig: ConnectorSummary
   destinationConfig: ConnectorSummary
   jobs: JobSummary[]
@@ -74,6 +76,8 @@ export default function PipelinesPage() {
       return
     }
     load()
+    const t = setInterval(load, 5000)
+    return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -295,7 +299,9 @@ export default function PipelinesPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-3">
-                      {p.name}
+                      <Link href={`/dashboard/pipelines/${p.id}`} className="hover:text-blue-600 hover:underline">
+                        {p.name}
+                      </Link>
                       <span className={`text-xs font-medium px-2 py-1 rounded-full ${statusBadge(p.status)}`}>
                         {p.status}
                       </span>
@@ -323,11 +329,17 @@ export default function PipelinesPage() {
                       </Button>
                     </span>
                   </CardTitle>
-                  <CardDescription className="flex items-center gap-2">
+                  <CardDescription className="flex items-center gap-2 flex-wrap">
                     <span>{p.sourceConfig?.name} ({p.sourceConfig?.connectorName})</span>
                     <ArrowRight className="h-3 w-3" />
                     <span>{p.destinationConfig?.name} ({p.destinationConfig?.connectorName})</span>
                     {p.schedule && <span className="ml-2 font-mono text-xs">cron: {p.schedule}</span>}
+                    {p.nextRunAt && (
+                      <span className="text-xs">· next run {new Date(p.nextRunAt).toLocaleString()}</span>
+                    )}
+                    {p.lastRunAt && (
+                      <span className="text-xs">· last run {new Date(p.lastRunAt).toLocaleString()}</span>
+                    )}
                   </CardDescription>
                 </CardHeader>
                 {p.jobs.length > 0 && (

@@ -25,3 +25,9 @@ venv/
 
 # OS
 .DS_Store
+
+# Local sync exports (CSV/JSONL/DuckDB destinations)
+data/exports/
+
+# TypeScript incremental build info
+*.tsbuildinfo

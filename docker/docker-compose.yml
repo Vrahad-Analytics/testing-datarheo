@@ -11,6 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -45,6 +46,7 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
       FRONTEND_URL: http://localhost:3000
+      EXPORT_DIR: /data/exports
     ports:
       - "8000:8000"
     depends_on:
@@ -55,6 +57,7 @@ services:
     volumes:
       - ../backend:/app
       - /app/node_modules
+      - ../data/exports:/data/exports
     command: npm run dev
 
   # Frontend
@@ -76,8 +79,12 @@ services:
       - /app/.next
     command: npm run dev
 
+  # Airflow is OPTIONAL — the backend's built-in job worker executes and
+  # schedules pipelines without it. Start it only if you want the Airflow UI:
+  #   docker compose -f docker/docker-compose.yml --profile airflow up -d
   # Airflow - PostgreSQL
   airflow-postgres:
+    profiles: ["airflow"]
     image: postgres:15-alpine
     container_name: datarheo-airflow-postgres
     environment:
@@ -89,13 +96,13 @@ services:
 
   # Airflow - Redis
   airflow-redis:
+    profiles: ["airflow"]
     image: redis:7-alpine
     container_name: datarheo-airflow-redis
-    ports:
-      - "6379:6379"
 
   # Airflow Webserver
   airflow-webserver:
+    profiles: ["airflow"]
     image: apache/airflow:2.8.0-python3.10
     container_name: datarheo-airflow-webserver
     depends_on:
@@ -126,6 +133,7 @@ services:
 
   # Airflow Scheduler
   airflow-scheduler:
+    profiles: ["airflow"]
     image: apache/airflow:2.8.0-python3.10
     container_name: datarheo-airflow-scheduler
     depends_on:
@@ -146,6 +154,7 @@ services:
 
   # Airflow Worker
   airflow-worker:
+    profiles: ["airflow"]
     image: apache/airflow:2.8.0-python3.10
     container_name: datarheo-airflow-worker
     depends_on:
@@ -166,6 +175,7 @@ services:
 
   # Airflow Flower (Celery monitor)
   airflow-flower:
+    profiles: ["airflow"]
     image: apache/airflow:2.8.0-python3.10
     container_name: datarheo-airflow-flower
     depends_on:

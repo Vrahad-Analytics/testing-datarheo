@@ -9,10 +9,22 @@ import { Database, ArrowLeft, Plus, Trash2, FlaskConical } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 
+interface ConfigField {
+  key: string
+  label: string
+  kind: 'text' | 'password' | 'number' | 'textarea'
+  required?: boolean
+  placeholder?: string
+  defaultValue?: any
+  help?: string
+}
+
 interface CatalogEntry {
   name: string
   displayName: string
   description: string
+  implemented: boolean
+  fields: ConfigField[]
 }
 
 interface Connector {
@@ -37,8 +49,27 @@ export default function ConnectorsPage() {
   const [name, setName] = useState('')
   const [type, setType] = useState<'SOURCE' | 'DESTINATION'>('SOURCE')
   const [connectorName, setConnectorName] = useState('')
-  const [configText, setConfigText] = useState('{}')
+  const [configValues, setConfigValues] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
+
+  const options = type === 'SOURCE' ? catalog.sources : catalog.destinations
+  const selectedSpec = options.find((o) => o.name === connectorName)
+
+  const setField = (key: string, value: string) =>
+    setConfigValues((prev) => ({ ...prev, [key]: value }))
+
+  const buildConfig = () => {
+    const config: Record<string, any> = {}
+    for (const f of selectedSpec?.fields || []) {
+      const raw = configValues[f.key]
+      if (raw === undefined || raw === '') {
+        if (f.defaultValue !== undefined) config[f.key] = f.defaultValue
+        continue
+      }
+      config[f.key] = f.kind === 'number' ? Number(raw) : raw
+    }
+    return config
+  }
 
   const load = async () => {
     try {
@@ -64,31 +95,20 @@ export default function ConnectorsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const options = type === 'SOURCE' ? catalog.sources : catalog.destinations
-
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError('')
-
-    let config: any
-    try {
-      config = JSON.parse(configText || '{}')
-    } catch {
-      setFormError('Config must be valid JSON')
-      return
-    }
-
     setIsSaving(true)
     try {
       await api('/api/connectors', {
         method: 'POST',
-        body: JSON.stringify({ name, type, connectorName, config }),
+        body: JSON.stringify({ name, type, connectorName, config: buildConfig() }),
       })
       toast({ title: 'Connector created', description: `${name} (${connectorName})` })
       setShowForm(false)
       setName('')
       setConnectorName('')
-      setConfigText('{}')
+      setConfigValues({})
       await load()
     } catch (err: any) {
       setFormError(err.message)
@@ -195,27 +215,57 @@ export default function ConnectorsPage() {
                   <label className="text-sm font-medium">Connector</label>
                   <select
                     value={connectorName}
-                    onChange={(e) => setConnectorName(e.target.value)}
+                    onChange={(e) => {
+                      setConnectorName(e.target.value)
+                      setConfigValues({})
+                    }}
                     required
                     className="w-full px-3 py-2 border border-input rounded-md bg-background"
                   >
                     <option value="" disabled>Select a connector…</option>
                     {options.map((o) => (
-                      <option key={o.name} value={o.name}>
+                      <option key={o.name} value={o.name} disabled={!o.implemented}>
                         {o.displayName} — {o.description}
+                        {!o.implemented ? ' (coming soon)' : ''}
                       </option>
                     ))}
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Config (JSON)</label>
-                  <textarea
-                    value={configText}
-                    onChange={(e) => setConfigText(e.target.value)}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-input rounded-md bg-background font-mono text-sm"
-                  />
-                </div>
+                {selectedSpec && (
+                  <div className="space-y-3 border rounded-md p-4 bg-gray-50 dark:bg-gray-900/40">
+                    {selectedSpec.fields.length === 0 && (
+                      <p className="text-sm text-gray-500">This connector needs no configuration.</p>
+                    )}
+                    {selectedSpec.fields.map((f) => (
+                      <div key={f.key} className="space-y-1">
+                        <label className="text-sm font-medium">
+                          {f.label}
+                          {f.required && <span className="text-red-500"> *</span>}
+                        </label>
+                        {f.kind === 'textarea' ? (
+                          <textarea
+                            value={configValues[f.key] ?? ''}
+                            onChange={(e) => setField(f.key, e.target.value)}
+                            required={f.required}
+                            placeholder={f.placeholder}
+                            rows={3}
+                            className="w-full px-3 py-2 border border-input rounded-md bg-background font-mono text-sm"
+                          />
+                        ) : (
+                          <input
+                            type={f.kind === 'password' ? 'password' : f.kind === 'number' ? 'number' : 'text'}
+                            value={configValues[f.key] ?? (f.defaultValue !== undefined ? String(f.defaultValue) : '')}
+                            onChange={(e) => setField(f.key, e.target.value)}
+                            required={f.required}
+                            placeholder={f.placeholder}
+                            className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                          />
+                        )}
+                        {f.help && <p className="text-xs text-gray-500">{f.help}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex space-x-2">
                   <Button type="submit" disabled={isSaving}>
                     {isSaving ? 'Creating…' : 'Create Connector'}

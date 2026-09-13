@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Database, Plus, Play, LogOut } from 'lucide-react'
+import { Database, Plus, Play, LogOut, ListChecks } from 'lucide-react'
 import { api } from '@/lib/api'
 
 interface Stats {
@@ -96,7 +96,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid md:grid-cols-4 gap-6 mb-8">
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -144,6 +144,23 @@ export default function DashboardPage() {
             <CardContent>
               <Link href="/dashboard/pipelines">
                 <Button variant="outline" className="w-full">View Pipelines</Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <ListChecks className="h-5 w-5 text-blue-600" />
+                <span>Jobs</span>
+              </CardTitle>
+              <CardDescription>
+                Monitor every sync run and view logs
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/dashboard/jobs">
+                <Button variant="outline" className="w-full">View Jobs</Button>
               </Link>
             </CardContent>
           </Card>

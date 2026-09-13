@@ -125,11 +125,16 @@ export const jobController = {
       const { id } = req.params;
 
       const job = await prisma.job.findUnique({
-        where: { id }
+        where: { id },
+        include: { pipeline: { select: { organizationId: true } } }
       });
 
       if (!job) {
         throw new AppError('Job not found', 404);
+      }
+
+      if (job.pipeline.organizationId !== req.organizationId && req.userRole !== 'SUPER_ADMIN') {
+        throw new AppError('Access denied', 403);
       }
 
       if (job.status !== 'PENDING' && job.status !== 'RUNNING') {
@@ -161,11 +166,16 @@ export const jobController = {
       const { level, page = 1, limit = 100 } = req.query;
 
       const job = await prisma.job.findUnique({
-        where: { id }
+        where: { id },
+        include: { pipeline: { select: { organizationId: true } } }
       });
 
       if (!job) {
         throw new AppError('Job not found', 404);
+      }
+
+      if (job.pipeline.organizationId !== req.organizationId && req.userRole !== 'SUPER_ADMIN') {
+        throw new AppError('Access denied', 403);
       }
 
       const where: any = { jobId: id };

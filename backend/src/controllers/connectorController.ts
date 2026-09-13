@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { testConnection } from '../services/connectorRuntime';
+import { testConnection, CONNECTOR_SPECS, assertValidConnectorConfig } from '../services/connectorRuntime';
 
 const prisma = new PrismaClient();
 
@@ -36,27 +36,12 @@ export const connectorController = {
 
   async getCatalog(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      // This would typically fetch from Airbyte's connector registry
-      // For now, return a sample catalog
-      const catalog = {
-        sources: [
-          { name: 'source-faker', displayName: 'Faker', description: 'Generate fake data' },
-          { name: 'source-postgres', displayName: 'PostgreSQL', description: 'PostgreSQL database' },
-          { name: 'source-mysql', displayName: 'MySQL', description: 'MySQL database' },
-          { name: 'source-s3', displayName: 'Amazon S3', description: 'Amazon S3 storage' }
-        ],
-        destinations: [
-          { name: 'destination-duckdb', displayName: 'DuckDB', description: 'DuckDB database' },
-          { name: 'destination-postgres', displayName: 'PostgreSQL', description: 'PostgreSQL database' },
-          { name: 'destination-databricks', displayName: 'Databricks', description: 'Databricks SQL warehouse (Delta table)' },
-          { name: 'destination-snowflake', displayName: 'Snowflake', description: 'Snowflake data warehouse' },
-          { name: 'destination-bigquery', displayName: 'BigQuery', description: 'Google BigQuery' }
-        ]
-      };
-
       res.json({
         success: true,
-        data: catalog
+        data: {
+          sources: CONNECTOR_SPECS.filter((s) => s.type === 'SOURCE'),
+          destinations: CONNECTOR_SPECS.filter((s) => s.type === 'DESTINATION')
+        }
       });
     } catch (error) {
       next(error);
@@ -66,6 +51,16 @@ export const connectorController = {
   async createConnector(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { name, type, connectorName, config } = req.body;
+
+      try {
+        const spec = CONNECTOR_SPECS.find((s) => s.name === connectorName);
+        if (spec && spec.type !== type) {
+          throw new Error(`Connector "${connectorName}" is a ${spec.type}, not ${type}`);
+        }
+        assertValidConnectorConfig(connectorName, config || {});
+      } catch (e: any) {
+        throw new AppError(e.message, 400);
+      }
 
       const connector = await prisma.connectorConfig.create({
         data: {
@@ -126,6 +121,22 @@ export const connectorController = {
     try {
       const { id } = req.params;
       const { name, config, isActive } = req.body;
+
+      const existing = await prisma.connectorConfig.findUnique({ where: { id } });
+      if (!existing) {
+        throw new AppError('Connector not found', 404);
+      }
+      if (existing.organizationId !== req.organizationId && req.userRole !== 'SUPER_ADMIN') {
+        throw new AppError('Access denied', 403);
+      }
+
+      if (config) {
+        try {
+          assertValidConnectorConfig(existing.connectorName, config);
+        } catch (e: any) {
+          throw new AppError(e.message, 400);
+        }
+      }
 
       const connector = await prisma.connectorConfig.update({
         where: { id },
