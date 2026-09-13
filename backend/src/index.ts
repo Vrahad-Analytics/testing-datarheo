@@ -13,6 +13,7 @@ import { connectorRoutes } from './routes/connectors';
 import { pipelineRoutes } from './routes/pipelines';
 import { jobRoutes } from './routes/jobs';
 import { userRoutes } from './routes/users';
+import { startJobWorker, stopJobWorker } from './services/jobWorker';
 
 dotenv.config();
 
@@ -64,11 +65,13 @@ const server = createServer(app);
 server.listen(PORT, () => {
   logger.info(`DataRheo Backend API running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  startJobWorker();
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  stopJobWorker();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);
@@ -77,6 +80,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully');
+  stopJobWorker();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);

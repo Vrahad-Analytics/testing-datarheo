@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
+import { testConnection } from '../services/connectorRuntime';
 
 const prisma = new PrismaClient();
 
@@ -47,6 +48,7 @@ export const connectorController = {
         destinations: [
           { name: 'destination-duckdb', displayName: 'DuckDB', description: 'DuckDB database' },
           { name: 'destination-postgres', displayName: 'PostgreSQL', description: 'PostgreSQL database' },
+          { name: 'destination-databricks', displayName: 'Databricks', description: 'Databricks SQL warehouse (Delta table)' },
           { name: 'destination-snowflake', displayName: 'Snowflake', description: 'Snowflake data warehouse' },
           { name: 'destination-bigquery', displayName: 'BigQuery', description: 'Google BigQuery' }
         ]
@@ -174,10 +176,10 @@ export const connectorController = {
         throw new AppError('Connector not found', 404);
       }
 
-      // Mock test result
+      const result = await testConnection(connector.connectorName, connector.config);
       const testResult = {
-        success: true,
-        message: 'Connection successful',
+        success: result.success,
+        message: result.message,
         timestamp: new Date().toISOString()
       };
 

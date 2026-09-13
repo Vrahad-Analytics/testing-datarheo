@@ -1,15 +1,25 @@
 "use client"
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Database, Plus, Play, Settings, LogOut } from 'lucide-react'
+import { Database, Plus, Play, LogOut } from 'lucide-react'
+import { api } from '@/lib/api'
+
+interface Stats {
+  pipelines: number
+  activeJobs: number
+  connectors: number
+  recordsSynced: number
+}
 
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [stats, setStats] = useState<Stats>({ pipelines: 0, activeJobs: 0, connectors: 0, recordsSynced: 0 })
 
   useEffect(() => {
     const userData = localStorage.getItem('user')
@@ -19,6 +29,26 @@ export default function DashboardPage() {
     }
     setUser(JSON.parse(userData))
     setIsLoading(false)
+
+    const loadStats = async () => {
+      try {
+        const [p, c, j] = await Promise.all([
+          api<{ pagination: { total: number } }>('/api/pipelines?limit=1'),
+          api<{ connectors: any[] }>('/api/connectors'),
+          api<{ jobs: any[]; pagination: { total: number } }>('/api/jobs'),
+        ])
+        const jobs = j.jobs || []
+        setStats({
+          pipelines: p.pagination?.total ?? 0,
+          connectors: c.connectors?.length ?? 0,
+          activeJobs: jobs.filter((job: any) => job.status === 'PENDING' || job.status === 'RUNNING').length,
+          recordsSynced: jobs.reduce((sum: number, job: any) => sum + (job.recordsWritten || 0), 0),
+        })
+      } catch {
+        // Stats are non-critical; leave zeros if the API is unreachable
+      }
+    }
+    loadStats()
   }, [router])
 
   const handleLogout = () => {
@@ -67,7 +97,7 @@ export default function DashboardPage() {
 
         {/* Quick Actions */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+          <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Plus className="h-5 w-5 text-blue-600" />
@@ -78,11 +108,13 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full">Create Pipeline</Button>
+              <Link href="/dashboard/pipelines">
+                <Button className="w-full">Create Pipeline</Button>
+              </Link>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+          <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Database className="h-5 w-5 text-blue-600" />
@@ -93,11 +125,13 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full">Manage Connectors</Button>
+              <Link href="/dashboard/connectors">
+                <Button variant="outline" className="w-full">Manage Connectors</Button>
+              </Link>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+          <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Play className="h-5 w-5 text-blue-600" />
@@ -108,7 +142,9 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full">View Pipelines</Button>
+              <Link href="/dashboard/pipelines">
+                <Button variant="outline" className="w-full">View Pipelines</Button>
+              </Link>
             </CardContent>
           </Card>
         </div>
@@ -120,7 +156,7 @@ export default function DashboardPage() {
               <CardTitle className="text-sm font-medium">Total Pipelines</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">0</div>
+              <div className="text-3xl font-bold">{stats.pipelines}</div>
             </CardContent>
           </Card>
 
@@ -129,7 +165,7 @@ export default function DashboardPage() {
               <CardTitle className="text-sm font-medium">Active Jobs</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">0</div>
+              <div className="text-3xl font-bold">{stats.activeJobs}</div>
             </CardContent>
           </Card>
 
@@ -138,7 +174,7 @@ export default function DashboardPage() {
               <CardTitle className="text-sm font-medium">Connectors</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">0</div>
+              <div className="text-3xl font-bold">{stats.connectors}</div>
             </CardContent>
           </Card>
 
@@ -147,7 +183,7 @@ export default function DashboardPage() {
               <CardTitle className="text-sm font-medium">Records Synced</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">0</div>
+              <div className="text-3xl font-bold">{stats.recordsSynced}</div>
             </CardContent>
           </Card>
         </div>

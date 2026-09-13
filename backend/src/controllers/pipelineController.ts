@@ -200,7 +200,25 @@ export const pipelineController = {
   async updatePipeline(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { name, description, schedule, config, streams, status } = req.body;
+      const { name, description, schedule, config, streams, status, sourceConfigId, destinationConfigId } = req.body;
+
+      // Validate connector changes the same way createPipeline does
+      for (const [configId, expectedType] of [
+        [sourceConfigId, 'SOURCE'],
+        [destinationConfigId, 'DESTINATION']
+      ] as const) {
+        if (!configId) continue;
+        const connector = await prisma.connectorConfig.findUnique({ where: { id: configId } });
+        if (!connector) {
+          throw new AppError('Connector not found', 404);
+        }
+        if (connector.organizationId !== req.organizationId) {
+          throw new AppError('Access denied', 403);
+        }
+        if (connector.type !== expectedType) {
+          throw new AppError(`Connector must be of type ${expectedType}`, 400);
+        }
+      }
 
       const pipeline = await prisma.pipeline.update({
         where: { id },
@@ -210,7 +228,9 @@ export const pipelineController = {
           ...(schedule !== undefined && { schedule }),
           ...(config && { config }),
           ...(streams && { streams }),
-          ...(status && { status })
+          ...(status && { status }),
+          ...(sourceConfigId && { sourceConfigId }),
+          ...(destinationConfigId && { destinationConfigId })
         }
       });
 
