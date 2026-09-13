@@ -1,0 +1,215 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String
+  name              String?
+  role              UserRole  @default(USER)
+  organizationId    String?
+  organization      Organization? @relation(fields: [organizationId], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastLogin         DateTime?
+  isActive          Boolean   @default(true)
+  
+  // Relations
+  createdPipelines   Pipeline[] @relation("PipelineCreator")
+  createdJobs       Job[]      @relation("JobCreator")
+  apiKeys           ApiKey[]
+  configuredConnectors ConnectorConfig[] @relation("ConnectorConfigurator")
+  
+  @@index([email])
+  @@index([organizationId])
+}
+
+model Organization {
+  id                String    @id @default(uuid())
+  name              String
+  slug              String    @unique
+  plan              Plan      @default(FREE)
+  maxConnectors     Int       @default(5)
+  maxPipelines      Int       @default(10)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  users             User[]
+  pipelines         Pipeline[]
+  connectors        ConnectorConfig[]
+  
+  @@index([slug])
+}
+
+model ConnectorConfig {
+  id                String    @id @default(uuid())
+  name              String
+  type              ConnectorType
+  connectorName     String    // e.g., "source-faker", "destination-postgres"
+  config            Json      // Connector-specific configuration
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  userId            String?   // Who created/configured it
+  user              User?     @relation("ConnectorConfigurator", fields: [userId], references: [id])
+  isActive          Boolean   @default(true)
+  isSystem          Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastTested        DateTime?
+  lastTestStatus    String?
+  
+  // Relations
+  sourcePipelines   Pipeline[] @relation("SourceConnector")
+  destPipelines     Pipeline[] @relation("DestinationConnector")
+  
+  @@index([organizationId])
+  @@index([connectorName])
+  @@index([type])
+}
+
+model Pipeline {
+  id                String    @id @default(uuid())
+  name              String
+  description       String?
+  sourceConfigId    String
+  sourceConfig      ConnectorConfig @relation("SourceConnector", fields: [sourceConfigId], references: [id])
+  destinationConfigId String
+  destinationConfig ConnectorConfig @relation("DestinationConnector", fields: [destinationConfigId], references: [id])
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  creatorId         String
+  creator           User      @relation("PipelineCreator", fields: [creatorId], references: [id])
+  schedule          String?   // Cron expression
+  status            PipelineStatus @default(ACTIVE)
+  config            Json      // Pipeline-specific settings
+  streams           Json      // Selected streams and their configs
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastRunAt         DateTime?
+  nextRunAt         DateTime?
+  
+  // Relations
+  jobs              Job[]
+  
+  @@index([organizationId])
+  @@index([creatorId])
+  @@index([status])
+}
+
+model Job {
+  id                String    @id @default(uuid())
+  pipelineId        String
+  pipeline          Pipeline  @relation(fields: [pipelineId], references: [id])
+  creatorId         String
+  creator           User      @relation("JobCreator", fields: [creatorId], references: [id])
+  status            JobStatus @default(PENDING)
+  airflowDagRunId   String?   // Reference to Airflow DAG run
+  config            Json      // Job-specific configuration overrides
+  startedAt         DateTime?
+  completedAt       DateTime?
+  recordsRead       Int       @default(0)
+  recordsWritten    Int       @default(0)
+  errorMessage      String?
+  metadata          Json?     // Additional job metadata
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  logs              JobLog[]
+  
+  @@index([pipelineId])
+  @@index([creatorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model JobLog {
+  id                String    @id @default(uuid())
+  jobId             String
+  job               Job       @relation(fields: [jobId], references: [id])
+  level             LogLevel
+  message           String
+  timestamp         DateTime  @default(now())
+  metadata          Json?
+  
+  @@index([jobId])
+  @@index([timestamp])
+}
+
+model ApiKey {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  name              String
+  keyHash           String    // Hashed API key
+  scopes            String[]  // Permissions
+  expiresAt         DateTime?
+  lastUsedAt        DateTime?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([keyHash])
+}
+
+model SystemMetrics {
+  id                String    @id @default(uuid())
+  metricType        String    // e.g., "pipeline_runs", "connector_installs"
+  metricValue       Float
+  dimensions        Json?     // Additional dimensions
+  timestamp         DateTime  @default(now())
+  
+  @@index([metricType])
+  @@index([timestamp])
+}
+
+// Enums
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum ConnectorType {
+  SOURCE
+  DESTINATION
+}
+
+enum PipelineStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+  FAILED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+  TIMEOUT
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}

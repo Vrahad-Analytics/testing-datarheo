@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: datarheo-frontend
+  namespace: datarheo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: datarheo-frontend
+  template:
+    metadata:
+      labels:
+        app: datarheo-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: your-registry/datarheo-frontend:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NEXT_PUBLIC_API_URL
+          value: "https://api.datarheo.yourdomain.com"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: datarheo-frontend
+  namespace: datarheo
+spec:
+  selector:
+    app: datarheo-frontend
+  ports:
+  - protocol: TCP
+    port: 3000
+    targetPort: 3000
+  type: ClusterIP

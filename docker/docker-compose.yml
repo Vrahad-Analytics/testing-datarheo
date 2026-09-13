@@ -1,0 +1,187 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: datarheo-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: datarheo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: datarheo-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    image: docker-backend:latest
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: datarheo-backend
+    environment:
+      NODE_ENV: development
+      PORT: 8000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/datarheo?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../backend:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Frontend
+  frontend:
+    image: docker-frontend:latest
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: datarheo-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+
+  # Airflow - PostgreSQL
+  airflow-postgres:
+    image: postgres:15-alpine
+    container_name: datarheo-airflow-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+
+  # Airflow - Redis
+  airflow-redis:
+    image: redis:7-alpine
+    container_name: datarheo-airflow-redis
+    ports:
+      - "6379:6379"
+
+  # Airflow Webserver
+  airflow-webserver:
+    image: apache/airflow:2.8.0-python3.10
+    container_name: datarheo-airflow-webserver
+    depends_on:
+      - airflow-postgres
+      - airflow-redis
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.basic_auth
+      AIRFLOW__WEBSERVER__SECRET_KEY: secret_key
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/plugins:/opt/airflow/plugins
+      - airflow_logs:/opt/airflow/logs
+    ports:
+      - "8080:8080"
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    image: apache/airflow:2.8.0-python3.10
+    container_name: datarheo-airflow-scheduler
+    depends_on:
+      - airflow-webserver
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/plugins:/opt/airflow/plugins
+      - airflow_logs:/opt/airflow/logs
+    command: scheduler
+
+  # Airflow Worker
+  airflow-worker:
+    image: apache/airflow:2.8.0-python3.10
+    container_name: datarheo-airflow-worker
+    depends_on:
+      - airflow-scheduler
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/plugins:/opt/airflow/plugins
+      - airflow_logs:/opt/airflow/logs
+    command: celery worker
+
+  # Airflow Flower (Celery monitor)
+  airflow-flower:
+    image: apache/airflow:2.8.0-python3.10
+    container_name: datarheo-airflow-flower
+    depends_on:
+      - airflow-redis
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ''
+    ports:
+      - "5555:5555"
+    command: celery flower
+
+volumes:
+  postgres_data:
+  redis_data:
+  airflow_postgres_data:
+  airflow_logs:
